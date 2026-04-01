@@ -1,1188 +1,399 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BOR AI — Sales Copilot</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<!-- docx.js per generazione Word — caricato da CDN unpkg -->
-<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
-<style>
-/* ═══════════════════════════════════════════
-   BACKLOG TECNICO (aggiornato)
-   ─────────────────────────────────────────
-   [DONE] Upload template preventivo (admin)
-   [DONE] Upload listino prezzi (admin)
-   [DONE] Generazione .docx da template + dati
-   [DONE] Microfono centrato desktop/mobile
-   [TODO-1] Sostituire dummy template con quello reale di Gianni (4 livelli)
-   [TODO-2] Listino prezzi reale: calcolo automatico importi + campo sconto %
-   [TODO-3] Google OAuth — login @borsecurity.it, auto-fill commerciale
-   [TODO-4] Log centralizzato preventivi (chi, quando, quale cliente)
-   [TODO-5] Gestione ruoli e permessi (Admin / Commerciale)
-   [TODO-6] Autenticazione demo → workaround password singola (Vercel env)
-   [SECURITY] API key mai nel frontend — solo Vercel env var
-   [SECURITY] GDPR: registrazione solo su richiesta (microfono manuale)
-   ═══════════════════════════════════════════ */
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOR AI Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:#0d0f14;--surface:#13161e;--surface2:#1a1e2a;
+      --border:rgba(255,255,255,0.07);--border-h:rgba(59,130,246,0.4);
+      --accent:#3b82f6;--glow:rgba(59,130,246,0.14);
+      --text:#e8eaf0;--muted:#6b7280;--dim:#9ca3af;
+      --ok:#10b981;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.035) 1px,transparent 1px);background-size:52px 52px;pointer-events:none;z-index:0}
+    body::after{content:'';position:fixed;top:-25vh;left:50%;transform:translateX(-50%);width:1000px;height:700px;background:radial-gradient(ellipse,rgba(59,130,246,.10) 0%,transparent 68%);pointer-events:none;z-index:0}
+    .shell{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 28px}
 
-:root{
-  --bg:#0d0f14;--surface:#141720;--surface2:#1c2030;--border:#252a3a;
-  --accent:#3b82f6;--accent2:#06b6d4;--ok:#22c55e;--warn:#f59e0b;
-  --danger:#ef4444;--text:#e8eaf0;--text2:#8892a4;--text3:#4a5568;
-  --admin:#a855f7;
-  --mono:'DM Mono',monospace;--head:'Syne',sans-serif;--body:'DM Sans',sans-serif;
-  --r:10px;--r2:6px;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;display:flex;flex-direction:column;}
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:0;}
+    /* HEADER */
+    header{display:flex;align-items:center;justify-content:space-between;padding:28px 0;border-bottom:1px solid var(--border);gap:16px}
+    .logo-wrap{display:flex;align-items:center;gap:18px}
+    .logo-img{height:36px;width:auto}
+    .logo-div{width:1px;height:30px;background:var(--border)}
+    .logo-text .brand{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;color:var(--text);letter-spacing:.03em}
+    .logo-text .sub{font-family:'DM Sans',sans-serif;font-weight:300;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);display:block;margin-top:2px}
+    .header-right{display:flex;align-items:center;gap:10px}
+    .status-pill{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);padding:7px 14px;border-radius:100px}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 2.8s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .btn-login{display:flex;align-items:center;gap:8px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;color:var(--text);background:var(--surface2);border:1px solid var(--border);padding:7px 16px;border-radius:100px;cursor:pointer;transition:border-color .2s,background .2s}
+    .btn-login:hover{border-color:var(--border-h);background:var(--surface)}
+    .user-chip{display:none;align-items:center;gap:8px;font-size:12px;color:var(--dim);background:var(--surface2);border:1px solid var(--border);padding:6px 14px;border-radius:100px}
+    .user-avatar{width:22px;height:22px;border-radius:50%;object-fit:cover}
+    .user-chip .logout{margin-left:6px;cursor:pointer;border:none;background:none;color:var(--muted);font-family:inherit;font-size:11px;transition:color .2s}
+    .user-chip .logout:hover{color:var(--text)}
 
-/* ── HEADER ── */
-header{position:relative;z-index:10;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(13,15,20,0.95);backdrop-filter:blur(12px);}
-.logo{display:flex;align-items:center;gap:14px;}
-.logo img{height:36px;width:auto;border-radius:4px;}
-.logo-divider{width:1px;height:28px;background:var(--border);}
-.logo-text-wrap{display:flex;flex-direction:column;gap:1px;}
-.logo-text{font-family:var(--head);font-weight:800;font-size:15px;letter-spacing:-0.3px;color:var(--text);}
-.logo-sub{font-size:10px;color:var(--text2);font-family:var(--mono);letter-spacing:0.5px;}
-.header-right{display:flex;align-items:center;gap:10px;}
-.user-pill{display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:20px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--text2);}
-.user-avatar{width:22px;height:22px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
-.pill{padding:4px 10px;border-radius:20px;font-size:11px;font-family:var(--mono);border:1px solid var(--border);color:var(--text2);}
-.pill.active{border-color:var(--ok);color:var(--ok);background:rgba(34,197,94,0.08);}
-.pill.admin{border-color:var(--admin);color:var(--admin);background:rgba(168,85,247,0.08);}
+    /* HERO */
+    .hero{padding:68px 0 48px;max-width:680px}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);background:var(--glow);border:1px solid rgba(59,130,246,.22);padding:5px 13px;border-radius:100px;margin-bottom:24px}
+    .hero h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(30px,5vw,54px);line-height:1.08;letter-spacing:-.025em;margin-bottom:20px}
+    .hero h1 em{font-style:normal;color:var(--accent)}
+    .hero p{font-size:16px;line-height:1.72;color:var(--dim);font-weight:300;max-width:520px}
 
-/* ── LAYOUT ── */
-main{position:relative;z-index:1;flex:1;max-width:860px;width:100%;margin:0 auto;padding:32px 24px 80px;display:flex;flex-direction:column;gap:24px;}
+    /* STAT BAR */
+    .stat-bar{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin:48px 0}
+    .stat{flex:1;padding:20px 26px;border-right:1px solid var(--border)}
+    .stat:last-child{border-right:none}
+    .stat-value{font-family:'Syne',sans-serif;font-weight:700;font-size:22px;color:var(--text)}
+    .stat-value em{color:var(--accent);font-style:normal}
+    .stat-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
 
-/* ── STEPS ── */
-.steps{display:flex;align-items:center;padding:0 4px;}
-.step{display:flex;align-items:center;gap:8px;flex:1;}
-.step-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:500;border:1.5px solid var(--border);color:var(--text3);transition:all .3s;flex-shrink:0;}
-.step-label{font-size:12px;color:var(--text3);font-family:var(--mono);transition:all .3s;white-space:nowrap;}
-.step-line{flex:1;height:1px;background:var(--border);margin:0 8px;transition:all .3s;}
-.step.done .step-num{background:var(--ok);border-color:var(--ok);color:#fff;}
-.step.done .step-label{color:var(--text2);}
-.step.done .step-line{background:var(--ok);}
-.step.active .step-num{background:var(--accent);border-color:var(--accent);color:#fff;}
-.step.active .step-label{color:var(--text);}
+    /* SECTION */
+    .sec-hd{display:flex;align-items:baseline;gap:14px;margin-bottom:26px}
+    .sec-hd h2{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;color:var(--text)}
+    .cnt{font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);padding:2px 10px;border-radius:100px}
 
-/* ── CARDS ── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .2s;}
-.card.active-card{border-color:rgba(59,130,246,0.3);}
-.card.admin-card{border-color:rgba(168,85,247,0.25);}
-.card-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
-.card-title{font-family:var(--head);font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;}
-.card-body{padding:20px;}
+    /* GRID */
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;margin-bottom:80px}
 
-/* ── DOCUMENTI ADMIN ── */
-.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
-@media(max-width:580px){.doc-grid{grid-template-columns:1fr;}}
-.doc-slot{background:var(--surface2);border:1.5px dashed var(--border);border-radius:var(--r2);padding:16px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s;}
-.doc-slot.loaded{border-style:solid;border-color:rgba(34,197,94,0.4);}
-.doc-slot.loaded-warn{border-style:solid;border-color:rgba(245,158,11,0.4);}
-.doc-slot-title{font-family:var(--head);font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;}
-.doc-slot-sub{font-size:11px;color:var(--text3);font-family:var(--mono);}
-.doc-status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;padding:8px 10px;border-radius:var(--r2);background:var(--bg);}
-.doc-status.ok{color:var(--ok);}
-.doc-status.missing{color:var(--text3);}
-.doc-status.warn{color:var(--warn);}
-.doc-filename{font-size:10px;color:var(--text2);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r2);background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);color:var(--admin);font-size:12px;cursor:pointer;font-family:var(--body);transition:all .15s;}
-.upload-btn:hover{background:rgba(168,85,247,0.2);}
-input[type=file]{display:none;}
-.admin-notice{padding:10px 14px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:var(--r2);font-size:11px;color:var(--admin);font-family:var(--mono);display:flex;align-items:center;gap:8px;}
+    /* CARD */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:32px 28px 28px;position:relative;overflow:hidden;transition:border-color .25s,box-shadow .25s,transform .22s;cursor:pointer;text-decoration:none;display:flex;flex-direction:column;gap:14px}
+    .card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 25% 15%,var(--glow) 0%,transparent 65%);opacity:0;transition:opacity .35s;pointer-events:none}
+    .card:hover{border-color:var(--border-h);box-shadow:0 8px 48px rgba(59,130,246,.11),0 2px 10px rgba(0,0,0,.35);transform:translateY(-4px)}
+    .card:hover::before{opacity:1}
+    /* LIVE card: slightly lighter bg + grey border */
+    .card.live-card{background:#181c26;border-color:rgba(255,255,255,0.13)}
+    .card.live-card:hover{border-color:var(--border-h)}
+    .card.soon{cursor:default;pointer-events:none}
+    .card.soon::before{display:none}
+    .card.soon:hover{transform:none;box-shadow:none;border-color:var(--border)}
+    .card.soon .ico{opacity:.35}
+    .card.soon .card-name{color:var(--muted)}
+    .card.soon .card-desc{color:#4b5563}
 
-/* ── RECORD AREA — CENTRATA ── */
-.record-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px 24px;gap:20px;text-align:center;}
-.rec-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;min-height:40px;}
-.rec-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);transition:border-color .2s;}
-.rec-item.transcribing{border-color:var(--accent);}
-.rec-item.done-item{border-color:rgba(34,197,94,0.3);}
-.rec-num{font-family:var(--mono);font-size:11px;color:var(--text3);width:20px;flex-shrink:0;}
-.rec-dur{font-family:var(--mono);font-size:12px;color:var(--text2);width:44px;flex-shrink:0;}
-.rec-transcript{flex:1;font-size:12px;color:var(--text2);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.rec-status-icon{font-size:14px;flex-shrink:0;}
-.rec-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;border-radius:4px;transition:color .15s;flex-shrink:0;}
-.rec-del:hover{color:var(--danger);}
-.rec-empty{font-family:var(--mono);font-size:12px;color:var(--text3);text-align:center;padding:16px;border:1px dashed var(--border);border-radius:var(--r2);}
+    .card-top{display:flex;align-items:flex-start;justify-content:space-between}
+    .ico{width:64px;height:64px;border-radius:16px;background:var(--glow);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .ico svg{width:38px;height:38px}
 
-/* ── BOTTONE MICROFONO CENTRATO ── */
-.record-btn{width:80px;height:80px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));transition:transform .15s,box-shadow .2s;box-shadow:0 0 0 0 rgba(59,130,246,0.4);}
-.record-btn:hover{transform:scale(1.06);box-shadow:0 0 24px rgba(59,130,246,0.35);}
-.record-btn.recording{background:linear-gradient(135deg,var(--danger),#f97316);animation:pulse 1.5s infinite;}
-.record-btn:disabled{background:var(--surface2);cursor:not-allowed;opacity:0.5;box-shadow:none;}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,0.5);}70%{box-shadow:0 0 0 22px rgba(239,68,68,0);}100%{box-shadow:0 0 0 0 rgba(239,68,68,0);}}
+    .badge{font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;padding:4px 11px;border-radius:100px;border:1px solid;flex-shrink:0}
+    .live{color:var(--ok);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.07)}
+    .soon-b{color:#4b5563;border-color:#1f2937;background:transparent}
 
-.timer{font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:3px;}
-.timer.running{color:var(--danger);}
-.record-status{font-family:var(--mono);font-size:12px;color:var(--text2);}
-.record-status span{color:var(--danger);}
-.waveform{display:flex;align-items:center;gap:3px;height:32px;}
-.wave-bar{width:3px;border-radius:2px;background:var(--border);}
-.waveform.active .wave-bar{background:var(--accent);animation:waveanim 0.8s ease-in-out infinite;}
-.waveform.active .wave-bar:nth-child(2n){animation-delay:.15s;}
-.waveform.active .wave-bar:nth-child(3n){animation-delay:.3s;}
-@keyframes waveanim{0%,100%{height:4px;}50%{height:24px;}}
+    .pillar{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);font-weight:500}
+    .card-name{font-family:'Syne',sans-serif;font-weight:700;font-size:19px;color:var(--text);line-height:1.2}
+    .card-desc{font-size:13px;line-height:1.68;color:var(--dim);font-weight:300;flex:1}
 
-/* ── BTN ── */
-.btn{padding:10px 20px;border-radius:var(--r2);border:none;cursor:pointer;font-family:var(--body);font-size:13px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;gap:8px;}
-.btn-primary{background:var(--accent);color:#fff;}
-.btn-primary:hover{background:#2563eb;}
-.btn-primary:disabled{opacity:0.4;cursor:not-allowed;}
-.btn-success{background:var(--ok);color:#fff;}
-.btn-success:hover{background:#16a34a;}
-.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border);}
-.btn-ghost:hover{color:var(--text);border-color:var(--text3);}
-.btn-danger{background:rgba(239,68,68,0.1);color:var(--danger);border:1px solid rgba(239,68,68,0.2);}
-.btn-danger:hover{background:rgba(239,68,68,0.2);}
-.btn-admin{background:rgba(168,85,247,0.15);color:var(--admin);border:1px solid rgba(168,85,247,0.3);}
-.btn-admin:hover{background:rgba(168,85,247,0.25);}
-.btn-word{background:rgba(43,108,176,0.15);color:#5ba4f5;border:1px solid rgba(43,108,176,0.35);}
-.btn-word:hover{background:rgba(43,108,176,0.28);}
-.btn-lg{padding:14px 28px;font-size:15px;border-radius:var(--r);}
+    .arrow{align-self:flex-end;width:34px;height:34px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;opacity:0;transform:translateX(-8px);transition:opacity .22s,transform .22s;margin-left:auto;flex-shrink:0}
+    .card:not(.soon):hover .arrow{opacity:1;transform:translateX(0)}
 
-/* ── PROCESSING ── */
-.processing-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--r2);font-family:var(--mono);font-size:12px;color:var(--text2);}
-.processing-row.done{color:var(--ok);}
-.processing-row.active{color:var(--accent);}
-.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin .6s linear infinite;flex-shrink:0;}
-@keyframes spin{to{transform:rotate(360deg);}}
+    /* FOOTER */
+    footer{border-top:1px solid var(--border);padding:22px 0;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+    footer a{color:var(--accent);text-decoration:none}
 
-/* ── FORM ── */
-.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-@media(max-width:580px){.field-grid{grid-template-columns:1fr;}}
-.field-group{display:flex;flex-direction:column;gap:5px;}
-.field-label{font-size:11px;font-family:var(--mono);color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;gap:6px;}
-.badge-warn{background:rgba(245,158,11,0.15);color:var(--warn);border:1px solid rgba(245,158,11,0.3);padding:1px 6px;border-radius:4px;font-size:10px;}
-.badge-ok{background:rgba(34,197,94,0.1);color:var(--ok);border:1px solid rgba(34,197,94,0.2);padding:1px 6px;border-radius:4px;font-size:10px;}
-input[type=text],input[type=email],select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);font-family:var(--body);font-size:13px;padding:9px 12px;width:100%;outline:none;transition:border-color .15s;}
-input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{border-color:var(--accent);}
-input.warn,textarea.warn{border-color:var(--warn);}
-textarea{resize:vertical;min-height:80px;}
-select{cursor:pointer;}
-select option{background:var(--surface2);}
+    /* Google button: icon-only on mobile */
+    .btn-login .login-label{display:inline}
+    @media(max-width:700px){
+      .shell{padding:0 12px}
+      .logo-div{display:none}
+      .logo-text .sub{display:none}
+      .logo-img{height:28px}
+      .logo-text .brand{font-size:14px}
+      .status-pill{display:none}
+      /* Icon-only login button */
+      .btn-login{padding:7px 9px;gap:0}
+      .btn-login .login-label{display:none}
+      /* Hero */
+      .hero{padding:36px 0 28px}
+      .hero p{font-size:14px}
+      /* Stat bar: one row, compact */
+      .stat-bar{border-radius:10px}
+      .stat{padding:10px 8px}
+      .stat-value{font-size:15px}
+      .stat-label{font-size:8px;letter-spacing:.04em;white-space:nowrap}
+      /* Grid 3x2 on mobile */
+      .grid{grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:48px}
+      .card{padding:14px 10px 12px;gap:8px;border-radius:12px}
+      .ico{width:40px;height:40px;border-radius:10px}
+      .ico svg{width:24px;height:24px}
+      .pillar{font-size:8px;letter-spacing:.06em}
+      .card-name{font-size:12px}
+      .card-desc{font-size:10px;line-height:1.5;display:none}
+      .badge{font-size:8px;padding:2px 6px}
+      .arrow{width:24px;height:24px}
+      .arrow svg{width:10px;height:10px}
+      footer{flex-direction:column;gap:6px;text-align:center;font-size:11px}
+    }
 
-/* ── TABELLA TELECAMERE ── */
-.cam-table{width:100%;border-collapse:collapse;}
-.cam-table th{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--text3);padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
-.cam-table td{padding:6px 4px;border-bottom:1px solid rgba(37,42,58,0.5);}
-.cam-table input[type=text],.cam-table select{padding:6px 8px;font-size:12px;}
-.cam-idx{font-family:var(--mono);font-size:11px;color:var(--text3);padding:0 8px;text-align:center;}
-
-/* ── CONF BAR ── */
-.conf-bar-wrap{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:var(--r2);margin-bottom:16px;}
-.conf-bar-label{font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap;}
-.conf-bar-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
-.conf-bar-fill{height:100%;border-radius:2px;transition:width .4s;}
-.conf-Alta .conf-bar-fill{background:var(--ok);width:100%;}
-.conf-Media .conf-bar-fill{background:var(--warn);width:60%;}
-.conf-Bassa .conf-bar-fill{background:var(--danger);width:25%;}
-.conf-val{font-family:var(--mono);font-size:11px;font-weight:500;}
-.conf-Alta .conf-val{color:var(--ok);}
-.conf-Media .conf-val{color:var(--warn);}
-.conf-Bassa .conf-val{color:var(--danger);}
-
-/* ── MISC ── */
-.section-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);display:flex;align-items:center;gap:10px;margin:20px 0 12px;}
-.section-label::after{content:'';flex:1;height:1px;background:var(--border);}
-.action-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.hidden{display:none!important;}
-::-webkit-scrollbar{width:6px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
-#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 18px;font-size:13px;color:var(--text);z-index:1000;transform:translateY(80px);opacity:0;transition:all .3s;max-width:320px;}
-#toast.show{transform:translateY(0);opacity:1;}
-#toast.success{border-color:var(--ok);}
-#toast.error{border-color:var(--danger);}
-
-/* ── HINT BOX ── */
-.hint-box{padding:10px 14px;background:var(--surface2);border-radius:var(--r2);font-family:var(--mono);font-size:11px;color:var(--text3);margin-bottom:16px;}
-
-/* ── DOCX BADGE ── */
-.doc-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);}
-.doc-badge.template{background:rgba(34,197,94,0.1);color:var(--ok);border:1px solid rgba(34,197,94,0.2);}
-.doc-badge.template.missing{background:rgba(245,158,11,0.1);color:var(--warn);border:1px solid rgba(245,158,11,0.2);}
-.doc-badge.listino{background:rgba(59,130,246,0.1);color:var(--accent);border:1px solid rgba(59,130,246,0.2);}
-.doc-badge.listino.missing{background:rgba(245,158,11,0.1);color:var(--warn);border:1px solid rgba(245,158,11,0.2);}
-.docs-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-
-@media(max-width:480px){
-  header{padding:10px 16px;}
-  main{padding:20px 14px 60px;}
-  .btn-lg{padding:12px 20px;font-size:14px;}
-  .logo-text{font-size:13px;}
-  .logo-sub{display:none;}
-}
-</style>
+    @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    header{animation:fadeUp .5s ease both}
+    .hero{animation:fadeUp .55s .05s ease both}
+    .stat-bar{animation:fadeUp .55s .12s ease both}
+    .sec-hd{animation:fadeUp .5s .18s ease both}
+    .card{animation:fadeUp .45s ease both;opacity:0}
+    .card:nth-child(1){animation-delay:.22s}
+    .card:nth-child(2){animation-delay:.30s}
+    .card:nth-child(3){animation-delay:.38s}
+    .card:nth-child(4){animation-delay:.46s}
+    .card:nth-child(5){animation-delay:.54s}
+    .card:nth-child(6){animation-delay:.62s}
+  </style>
 </head>
 <body>
+<div class="shell">
 
-<!-- ═══════════════ HEADER ═══════════════ -->
 <header>
-  <div class="logo">
-    <img src="data:image/jpeg;base64,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" alt="BOR"/>
-    <div class="logo-divider"></div>
-    <div class="logo-text-wrap">
-      <div class="logo-text">BOR AI · Sales Copilot</div>
-      <div class="logo-sub">TRUSTED PEOPLE · Videosorveglianza</div>
+  <div class="logo-wrap">
+    <img class="logo-img" alt="BOR Security" id="logoImg" src="data:image/png;base64,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"/>
+    <div class="logo-div"></div>
+    <div class="logo-text">
+      <span class="brand">BOR AI Platform</span>
+      <span class="sub">Intelligence Operations Hub</span>
     </div>
   </div>
   <div class="header-right">
-    <div class="docs-summary" id="docsSummary">
-      <span class="doc-badge template missing" id="badgeTemplate">📄 Template —</span>
-      <span class="doc-badge listino missing" id="badgeListino">💰 Listino —</span>
+    <div class="status-pill">
+      <div class="dot"></div>
+      <span>1 agente attivo · 5 in sviluppo</span>
     </div>
-    <div class="user-pill" id="userPill">
-      <div class="user-avatar" id="userAvatar">?</div>
-      <span id="userName">non autenticato</span>
+    <button class="btn-login" id="btnLogin" onclick="handleLogin()">
+      <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      <span class="login-label">Accedi con Google</span>
+    </button>
+    <div class="user-chip" id="userChip">
+      <img class="user-avatar" id="userAvatar" src="" alt=""/>
+      <span id="userName"></span>
+      <button class="logout" onclick="handleLogout()">Esci</button>
     </div>
-    <div class="pill active" id="apiStatus">✓ Backend sicuro</div>
   </div>
 </header>
 
-<main>
+<div class="hero">
+  <div class="eyebrow">
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>
+    Pilastri AI · Fase 1 in corso
+  </div>
+  <h1>I tuoi agenti AI<br/><em>lavorano per te.</em></h1>
+  <p>Sei processi aziendali, sei agenti specializzati. Dalla preventivazione al QA, ogni reparto ha il suo copilota intelligente.</p>
+</div>
 
-  <!-- ═══ STEP INDICATOR ═══ -->
-  <div class="steps">
-    <div class="step active" id="s1"><div class="step-num">1</div><div class="step-label">Registra</div><div class="step-line"></div></div>
-    <div class="step" id="s2"><div class="step-num">2</div><div class="step-label">Analisi AI</div><div class="step-line"></div></div>
-    <div class="step" id="s3"><div class="step-num">3</div><div class="step-label">Valida</div><div class="step-line"></div></div>
-    <div class="step" id="s4"><div class="step-num">4</div><div class="step-label">Genera</div></div>
+<div class="stat-bar">
+  <div class="stat"><div class="stat-value">35<em>k</em></div><div class="stat-label">Telecamere attive</div></div>
+  <div class="stat"><div class="stat-value">6</div><div class="stat-label">Agenti pianificati</div></div>
+  <div class="stat"><div class="stat-value">€150<em>k</em></div><div class="stat-label">Saving target / anno</div></div>
+  <div class="stat"><div class="stat-value">12<em>m</em></div><div class="stat-label">Trasformazione completa</div></div>
+</div>
+
+<div class="sec-hd">
+  <h2>Agenti disponibili</h2>
+  <span class="cnt">6 agenti · 1 live</span>
+</div>
+
+<div class="grid">
+
+  <!-- 1 · SALES COPILOT LIVE -->
+  <a class="card live-card" href="https://bor-sales-copilot.vercel.app/" target="_blank" rel="noopener">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="14" width="30" height="20" rx="3" stroke="#3b82f6" stroke-width="2.2" fill="rgba(59,130,246,0.08)"/>
+          <path d="M13 14V11C13 9.343 14.343 8 16 8h6c1.657 0 3 1.343 3 3v3" stroke="#3b82f6" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="4" y1="23" x2="34" y2="23" stroke="#3b82f6" stroke-width="2" opacity="0.6"/>
+          <rect x="15" y="21" width="8" height="4" rx="1" stroke="#3b82f6" stroke-width="1.6" fill="rgba(59,130,246,0.18)"/>
+          <line x1="8" y1="29" x2="14" y2="29" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+          <line x1="24" y1="29" x2="30" y2="29" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+      </div>
+      <span class="badge live">● Live</span>
+    </div>
+    <div class="pillar">Pilastro A · Fase 1</div>
+    <div class="card-name">Sales Copilot</div>
+    <div class="card-desc">Registra note vocali durante il sopralluogo, trascrivi con Whisper e genera preventivi strutturati via LLM — in pochi minuti.</div>
+    <div class="arrow">
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+    </div>
+  </a>
+
+  <!-- 2 · SMART TESTER VISIVO -->
+  <div class="card soon">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="2" width="18" height="32" rx="3.5" stroke="#3b82f6" stroke-width="2" fill="rgba(59,130,246,0.06)"/>
+          <rect x="12" y="6" width="14" height="20" rx="1.5" fill="rgba(59,130,246,0.04)" stroke="#3b82f6" stroke-width="1.2" opacity="0.5"/>
+          <!-- detection boxes green dashed -->
+          <rect x="13" y="7" width="6" height="5" rx="0.8" stroke="#10b981" stroke-width="1.4" stroke-dasharray="2 1.2" fill="rgba(16,185,129,0.10)"/>
+          <rect x="20" y="11" width="5" height="6" rx="0.8" stroke="#10b981" stroke-width="1.4" stroke-dasharray="2 1.2" fill="rgba(16,185,129,0.10)"/>
+          <rect x="13.5" y="15" width="7" height="6" rx="0.8" stroke="#10b981" stroke-width="1.4" stroke-dasharray="2 1.2" fill="rgba(16,185,129,0.10)"/>
+          <!-- corner brackets -->
+          <path d="M12 8 L12 6 L14 6" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M26 8 L26 6 L24 6" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="19" cy="33" r="1.2" fill="#3b82f6" opacity="0.45"/>
+        </svg>
+      </div>
+      <span class="badge soon-b">Coming soon</span>
+    </div>
+    <div class="pillar">Pilastro B · Fase 2</div>
+    <div class="card-name">Smart Tester Visivo</div>
+    <div class="card-desc">Computer Vision su smartphone per validare l'installazione: inquadratura, copertura angolare e qualità immagine rilevate sul campo.</div>
   </div>
 
-  <!-- ═══ CARD: DOCUMENTI ADMIN ═══ -->
-  <div class="card admin-card" id="cardAdmin">
-    <div class="card-header">
-      <div class="card-title">⚙ Documenti di riferimento <span class="pill admin" style="margin-left:6px;">Admin</span></div>
-      <button class="btn btn-admin" style="padding:5px 12px;font-size:11px;" onclick="toggleAdminPanel()">▾ Gestisci</button>
-    </div>
-    <div id="adminPanelBody" class="hidden">
-      <div class="card-body" style="padding-top:14px;">
-        <div class="admin-notice">⚠ In fase demo: documenti salvati localmente nel browser. In produzione verranno caricati su server centralizzato.</div>
-        <div style="height:14px;"></div>
-        <div class="doc-grid">
-
-          <!-- Template Preventivo -->
-          <div class="doc-slot" id="slotTemplate">
-            <div class="doc-slot-title">📄 Template Preventivo</div>
-            <div class="doc-slot-sub">.docx con placeholder {{CAMPO}}</div>
-            <div class="doc-status missing" id="statusTemplate">○ Non caricato — verrà usato template dummy</div>
-            <div class="doc-filename hidden" id="nameTemplate"></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <label class="upload-btn" for="fileTemplate">⬆ Carica .docx</label>
-              <input type="file" id="fileTemplate" accept=".docx,.doc" onchange="handleDocUpload('template',this)"/>
-              <button class="btn btn-danger" style="padding:7px 12px;font-size:11px;" onclick="clearDoc('template')">✕ Rimuovi</button>
-            </div>
-          </div>
-
-          <!-- Listino Prezzi -->
-          <div class="doc-slot" id="slotListino">
-            <div class="doc-slot-title">💰 Listino Prezzi</div>
-            <div class="doc-slot-sub">.xlsx / .csv / .pdf</div>
-            <div class="doc-status missing" id="statusListino">○ Non caricato — prezzi non calcolati</div>
-            <div class="doc-filename hidden" id="nameListino"></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <label class="upload-btn" for="fileListino">⬆ Carica listino</label>
-              <input type="file" id="fileListino" accept=".xlsx,.csv,.pdf,.xls" onchange="handleDocUpload('listino',this)"/>
-              <button class="btn btn-danger" style="padding:7px 12px;font-size:11px;" onclick="clearDoc('listino')">✕ Rimuovi</button>
-            </div>
-          </div>
-
-        </div>
+  <!-- 3 · TRIAGE AGENT TUNISIA -->
+  <div class="card soon">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 6 L33 6 L25 16 L25 30 L13 34 L13 16 Z" stroke="#3b82f6" stroke-width="2.2" stroke-linejoin="round" fill="rgba(59,130,246,0.07)"/>
+          <line x1="8" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="1.4" stroke-linecap="round" opacity="0.55"/>
+          <line x1="11" y1="14" x2="27" y2="14" stroke="#3b82f6" stroke-width="1.4" stroke-linecap="round" opacity="0.55"/>
+          <!-- red particles (filtered) -->
+          <circle cx="10" cy="8" r="1.5" fill="#ef4444" opacity="0.85"/>
+          <circle cx="19" cy="8" r="1.5" fill="#ef4444" opacity="0.85"/>
+          <circle cx="28" cy="8" r="1.5" fill="#ef4444" opacity="0.85"/>
+          <!-- green particles (passed) -->
+          <circle cx="19" cy="22" r="1.8" fill="#10b981" opacity="0.95"/>
+          <circle cx="19" cy="28" r="1.5" fill="#10b981" opacity="0.75"/>
+        </svg>
       </div>
+      <span class="badge soon-b">Coming soon</span>
     </div>
+    <div class="pillar">Pilastro C · Fase 1</div>
+    <div class="card-name">Triage Agent Tunisia</div>
+    <div class="card-desc">Filtraggio on-premise dei falsi positivi H24. GPU locale, latenza zero, scalabile fino a 50k cam senza aumentare il team Tunisia.</div>
   </div>
 
-  <!-- ═══ CARD 1: REGISTRAZIONI ═══ -->
-  <div class="card active-card" id="card1">
-    <div class="card-header">
-      <div class="card-title">🎙 Registrazioni Sopralluogo</div>
-      <div class="pill" id="recPill">Pronto</div>
+  <!-- 4 · PREDICTIVE MAINTENANCE -->
+  <div class="card soon">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- van body -->
+          <rect x="2" y="18" width="24" height="13" rx="2.5" stroke="#3b82f6" stroke-width="2" fill="rgba(59,130,246,0.07)"/>
+          <!-- van cab -->
+          <path d="M26 22 L34 22 L34 31 L26 31 Z" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" fill="rgba(59,130,246,0.05)"/>
+          <path d="M26 22 L30 17 L34 17 L34 22" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" fill="rgba(59,130,246,0.08)"/>
+          <!-- wheels -->
+          <circle cx="10" cy="32" r="3.5" stroke="#3b82f6" stroke-width="2" fill="rgba(59,130,246,0.1)"/>
+          <circle cx="29" cy="32" r="3.5" stroke="#3b82f6" stroke-width="2" fill="rgba(59,130,246,0.1)"/>
+          <!-- wrench upper right -->
+          <path d="M28 10 C26 8 26 5 28.5 3.5 C29.1 3.2 29.8 3.9 29.4 4.5 L27.5 7.5 L29 9 L31.5 6.5 C32.1 6.1 32.8 6.8 32.4 7.4 C30.8 9.5 31.8 12.5 28 10Z" stroke="#3b82f6" stroke-width="1.4" fill="rgba(59,130,246,0.18)"/>
+          <line x1="28" y1="10" x2="24" y2="15" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="badge soon-b">Coming soon</span>
     </div>
-    <div class="card-body">
-
-      <!-- Lista registrazioni -->
-      <div class="rec-list" id="recList">
-        <div class="rec-empty" id="recEmpty">Nessuna registrazione. Premi il microfono per iniziare.</div>
-      </div>
-
-      <!-- HERO centrata: microfono + timer + waveform -->
-      <div class="record-hero">
-        <button class="record-btn" id="recordBtn" onclick="toggleRecording()">🎙</button>
-        <div class="timer" id="timer">00:00</div>
-        <div class="record-status" id="recStatus">Premi per registrare una nota vocale</div>
-        <div class="waveform" id="waveform">
-          <div class="wave-bar" style="height:6px"></div><div class="wave-bar" style="height:12px"></div>
-          <div class="wave-bar" style="height:8px"></div><div class="wave-bar" style="height:18px"></div>
-          <div class="wave-bar" style="height:10px"></div><div class="wave-bar" style="height:16px"></div>
-          <div class="wave-bar" style="height:6px"></div><div class="wave-bar" style="height:20px"></div>
-          <div class="wave-bar" style="height:8px"></div><div class="wave-bar" style="height:14px"></div>
-          <div class="wave-bar" style="height:10px"></div><div class="wave-bar" style="height:18px"></div>
-        </div>
-      </div>
-
-      <div class="hint-box">💡 Registra più note vocali brevi. Verranno analizzate insieme come un unico sopralluogo.</div>
-
-      <div class="action-row">
-        <button class="btn btn-primary btn-lg hidden" id="analyzeBtn" onclick="runAnalysis()">✨ Analizza con AI</button>
-        <button class="btn btn-ghost hidden" id="useMockBtn" onclick="useMockData()">🧪 Usa dati demo</button>
-        <button class="btn btn-danger hidden" id="resetBtn1" onclick="resetAll()">↺ Ricomincia</button>
-      </div>
-    </div>
+    <div class="pillar">Pilastro D · Fase 2</div>
+    <div class="card-name">Predictive Maintenance</div>
+    <div class="card-desc">ML su log di rete per anticipare guasti, riavvii remoti automatici e azzeramento Truck Rolls non necessari. Target: –€150k/anno.</div>
   </div>
 
-  <!-- ═══ CARD 2: ANALISI ═══ -->
-  <div class="card hidden" id="card2">
-    <div class="card-header"><div class="card-title">⚙ Analisi in corso...</div></div>
-    <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
-      <div class="processing-row" id="proc1"><div>○</div><span id="proc1txt">Trascrizione audio con Whisper</span></div>
-      <div class="processing-row" id="proc2"><div>○</div><span>Unione trascrizioni</span></div>
-      <div class="processing-row" id="proc3"><div>○</div><span>Estrazione dati con LLM</span></div>
-      <div class="processing-row" id="proc4"><div>○</div><span>Preparazione preventivo</span></div>
+  <!-- 5 · CUSTOMER CARE BOT -->
+  <div class="card soon">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 8 C5 6.343 6.343 5 8 5 L30 5 C31.657 5 33 6.343 33 8 L33 22 C33 23.657 31.657 25 30 25 L14 25 L8 32 L8 25 L8 25 C6.343 25 5 23.657 5 22 Z" stroke="#3b82f6" stroke-width="2.2" fill="rgba(59,130,246,0.07)"/>
+          <circle cx="13" cy="15.5" r="2.2" fill="#3b82f6" opacity="0.65"/>
+          <circle cx="19" cy="15.5" r="2.2" fill="#3b82f6" opacity="0.82"/>
+          <circle cx="25" cy="15.5" r="2.2" fill="#3b82f6"/>
+          <line x1="19" y1="5" x2="19" y2="2" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="19" cy="1.2" r="1" fill="#3b82f6"/>
+        </svg>
+      </div>
+      <span class="badge soon-b">Coming soon</span>
     </div>
+    <div class="pillar">Pilastro E · Fase 2</div>
+    <div class="card-name">Customer Care Bot</div>
+    <div class="card-desc">Agente RAG su manualistica e knowledge base per gestire ticket L1 in autonomia, scaricando il team di supporto tecnico.</div>
   </div>
 
-  <!-- ═══ CARD 3: VALIDAZIONE ═══ -->
-  <div class="card hidden" id="card3">
-    <div class="card-header"><div class="card-title">✏ Valida e correggi</div><div class="pill" id="confPill">—</div></div>
-    <div class="card-body">
-      <div class="conf-bar-wrap conf-Alta" id="confBar">
-        <span class="conf-bar-label">Confidenza AI</span>
-        <div class="conf-bar-track"><div class="conf-bar-fill"></div></div>
-        <span class="conf-val">—</span>
+  <!-- 6 · QA COPILOT -->
+  <div class="card soon">
+    <div class="card-top">
+      <div class="ico">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- back banknote -->
+          <rect x="6" y="10" width="26" height="16" rx="2.5" stroke="#3b82f6" stroke-width="1.6" fill="rgba(59,130,246,0.04)" transform="rotate(-5 19 18)"/>
+          <!-- mid banknote -->
+          <rect x="6" y="12" width="26" height="16" rx="2.5" stroke="#3b82f6" stroke-width="1.6" fill="rgba(59,130,246,0.06)" transform="rotate(-1.5 19 20)"/>
+          <!-- front banknote -->
+          <rect x="5" y="15" width="28" height="16" rx="2.5" stroke="#3b82f6" stroke-width="2.2" fill="rgba(59,130,246,0.10)"/>
+          <!-- euro sign -->
+          <text x="19" y="27" text-anchor="middle" font-size="10" font-family="Syne,sans-serif" font-weight="700" fill="#3b82f6">€</text>
+          <!-- detail lines -->
+          <line x1="7" y1="20" x2="12" y2="20" stroke="#3b82f6" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+          <line x1="7" y1="24" x2="12" y2="24" stroke="#3b82f6" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+          <line x1="26" y1="20" x2="31" y2="20" stroke="#3b82f6" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+          <line x1="26" y1="24" x2="31" y2="24" stroke="#3b82f6" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+        </svg>
       </div>
-      <div class="section-label">Nota sintetica</div>
-      <div class="field-group"><textarea id="notaSintetica" rows="4"></textarea></div>
-      <div class="section-label">Dati cliente</div>
-      <div class="field-grid">
-        <div class="field-group"><label class="field-label" id="lbl_ragione">Ragione sociale</label><input type="text" id="f_ragione"/></div>
-        <div class="field-group"><label class="field-label">Tipo cliente</label><select id="f_tipo"><option value="non rilevato">— non rilevato —</option><option>Residenziale</option><option>Commerciale</option><option>Industriale</option><option>GDO</option><option>Pubblico</option></select></div>
-        <div class="field-group"><label class="field-label" id="lbl_referente">Referente</label><input type="text" id="f_referente"/></div>
-        <div class="field-group"><label class="field-label" id="lbl_indirizzo">Indirizzo sito</label><input type="text" id="f_indirizzo"/></div>
-      </div>
-      <div class="section-label">Dati sito</div>
-      <div class="field-grid">
-        <div class="field-group"><label class="field-label" id="lbl_sup">Superficie (mq)</label><input type="text" id="f_sup"/></div>
-        <div class="field-group"><label class="field-label" id="lbl_per">Perimetro (ml)</label><input type="text" id="f_per"/></div>
-        <div class="field-group"><label class="field-label" id="lbl_acc">N° accessi</label><input type="text" id="f_acc"/></div>
-        <div class="field-group"><label class="field-label">Illuminazione</label><select id="f_ill"><option value="non rilevato">— non rilevato —</option><option>Presente</option><option>Assente</option><option>Parziale</option></select></div>
-        <div class="field-group" style="grid-column:1/-1;"><label class="field-label">Note tecniche</label><textarea id="f_note" rows="2"></textarea></div>
-      </div>
-      <div class="section-label">Intervento</div>
-      <div class="field-grid">
-        <div class="field-group"><label class="field-label">Livello procedura</label><select id="f_lvl"><option value="non rilevato">— non rilevato —</option><option>1-Facile</option><option>2-Standard</option><option>3-Complesso</option><option>4-Enterprise</option></select></div>
-        <div class="field-group"><label class="field-label">Tipo contratto</label><select id="f_contratto"><option value="non rilevato">— non rilevato —</option><option>Nuova installazione</option><option>Upgrade</option><option>Manutenzione</option></select></div>
-        <div class="field-group"><label class="field-label">Urgenza</label><select id="f_urg"><option value="non rilevato">— non rilevato —</option><option>Alta</option><option>Media</option><option>Bassa</option></select></div>
-        <div class="field-group"><label class="field-label">Control Room Tunisia</label><select id="f_cr"><option value="non rilevato">— non rilevato —</option><option>Sì</option><option>No</option><option>Da valutare</option></select></div>
-      </div>
-      <div class="section-label">Telecamere</div>
-      <div style="overflow-x:auto;">
-        <table class="cam-table">
-          <thead><tr><th>#</th><th>Posizione</th><th>Tipo</th><th>Note</th><th></th></tr></thead>
-          <tbody id="camBody"></tbody>
-        </table>
-      </div>
-      <button class="btn btn-ghost" style="margin-top:8px;font-size:12px;" onclick="addCamRow()">+ Aggiungi telecamera</button>
-      <div class="section-label">Commerciale</div>
-      <div class="field-grid">
-        <div class="field-group"><label class="field-label">Nome</label><input type="text" id="f_commName"/></div>
-        <div class="field-group"><label class="field-label">Email</label><input type="email" id="f_commEmail"/></div>
-      </div>
-      <div style="margin-top:24px;" class="action-row">
-        <button class="btn btn-success btn-lg" onclick="goToSend()">✓ Conferma e procedi →</button>
-        <button class="btn btn-ghost" onclick="resetAll()">↺ Ricomincia</button>
-      </div>
+      <span class="badge soon-b">Coming soon</span>
     </div>
+    <div class="pillar">Pilastro F · Fase 3</div>
+    <div class="card-name">QA Copilot</div>
+    <div class="card-desc">Human-in-the-loop per audit SLA, scansione log operativi e verifica report paghe. Compliance e qualità sempre sotto controllo.</div>
   </div>
 
-  <!-- ═══ CARD 4: GENERA E INVIA ═══ -->
-  <div class="card hidden" id="card4">
-    <div class="card-header"><div class="card-title">📤 Genera e invia</div></div>
-    <div class="card-body">
+</div><!-- /grid -->
 
-      <!-- Info documenti usati -->
-      <div id="docsUsedInfo" style="margin-bottom:16px;padding:10px 14px;background:var(--surface2);border-radius:var(--r2);font-family:var(--mono);font-size:11px;color:var(--text2);"></div>
+<footer>
+  <span>© 2025 BOR Security · AI &amp; Process Optimization</span>
+  <span>Powered by <a href="https://groq.com" target="_blank">Groq</a> · Deploy su <a href="https://vercel.com" target="_blank">Vercel</a></span>
+</footer>
 
-      <div style="margin-bottom:20px;">
-        <div class="field-group">
-          <label class="field-label">Email destinatario</label>
-          <input type="email" id="f_sendEmail"/>
-        </div>
-      </div>
-
-      <div class="action-row">
-        <button class="btn btn-word btn-lg" onclick="downloadDOCX()">📝 Scarica Word (.docx)</button>
-        <button class="btn btn-primary btn-lg" onclick="downloadPDF()">⬇ Scarica PDF</button>
-        <button class="btn btn-success btn-lg" onclick="sendEmail()">📧 Invia via email</button>
-        <button class="btn btn-ghost" onclick="goBackToValidation()">← Torna</button>
-      </div>
-
-      <div id="sendResult" class="hidden" style="margin-top:16px;padding:14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--r);font-size:13px;color:var(--ok);">✓ Operazione completata</div>
-      <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">
-        <button class="btn btn-ghost" onclick="resetAll()">↺ Nuovo sopralluogo</button>
-      </div>
-    </div>
-  </div>
-
-</main>
-<div id="toast"></div>
+</div><!-- /shell -->
 
 <script>
-// ═══════════════════════════════════════════════
-// BACKEND ENDPOINTS (proxy sicuro — nessuna API key nel browser)
-// ═══════════════════════════════════════════════
-const API_TRANSCRIBE = '/api/transcribe';
-const API_EXTRACT    = '/api/extract';
+const CLIENT_ID='70706530702-qrdq2ivs7us6rf53ad6dc5aref0l75fl.apps.googleusercontent.com'; // ← sostituisci con il tuo Client ID
 
-// ═══════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════
-let mediaRecorder=null, audioChunks=[], isRecording=false, timerInterval=null, seconds=0;
-let recordings=[], extractedData=null;
-
-// Documenti caricati dall'admin — stored in localStorage (demo) o RAM
-// Struttura: { name: string, content: string (testo estratto), raw: ArrayBuffer }
-let templateDoc = null;   // template preventivo .docx
-let listinoDoc  = null;   // listino prezzi
-
-// ═══════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════
-function initUser(){
-  const name  = localStorage.getItem('user_name')  || '';
-  const email = localStorage.getItem('user_email') || '';
-  if(name){
-    document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
-    document.getElementById('userName').textContent   = name;
-  }
-}
-
-function initDocs(){
-  // Ripristina metadati documenti da localStorage (non il contenuto binario — troppo pesante)
-  const tmeta = localStorage.getItem('doc_template_meta');
-  const lmeta = localStorage.getItem('doc_listino_meta');
-  if(tmeta){
-    const m = JSON.parse(tmeta);
-    templateDoc = { name: m.name, content: m.content, raw: null };
-    updateDocUI('template', true, m.name);
-  }
-  if(lmeta){
-    const m = JSON.parse(lmeta);
-    listinoDoc = { name: m.name, content: m.content, raw: null };
-    updateDocUI('listino', true, m.name);
-  }
-}
-
-// ═══════════════════════════════════════════════
-// ADMIN PANEL
-// ═══════════════════════════════════════════════
-function toggleAdminPanel(){
-  const body = document.getElementById('adminPanelBody');
-  body.classList.toggle('hidden');
-}
-
-async function handleDocUpload(tipo, input){
-  const file = input.files[0];
-  if(!file) return;
-  toast('Lettura '+file.name+'...','info');
-
-  try{
-    // Leggi come testo il contenuto utile (per passarlo all'LLM)
-    const text = await extractTextFromFile(file);
-    const meta = { name: file.name, content: text };
-
-    if(tipo === 'template'){
-      templateDoc = { name: file.name, content: text, raw: null };
-      localStorage.setItem('doc_template_meta', JSON.stringify(meta));
-      updateDocUI('template', true, file.name);
-    } else {
-      listinoDoc = { name: file.name, content: text, raw: null };
-      localStorage.setItem('doc_listino_meta', JSON.stringify(meta));
-      updateDocUI('listino', true, file.name);
-    }
-    toast('✓ '+file.name+' caricato', 'success');
-  } catch(e){
-    toast('Errore lettura file: '+e.message, 'error');
-  }
-  input.value = '';
-}
-
-function clearDoc(tipo){
-  if(tipo === 'template'){
-    templateDoc = null;
-    localStorage.removeItem('doc_template_meta');
-    updateDocUI('template', false, null);
-  } else {
-    listinoDoc = null;
-    localStorage.removeItem('doc_listino_meta');
-    updateDocUI('listino', false, null);
-  }
-  toast('Documento rimosso','info');
-}
-
-function updateDocUI(tipo, loaded, name){
-  const slot   = document.getElementById('slot'+(tipo==='template'?'Template':'Listino'));
-  const status = document.getElementById('status'+(tipo==='template'?'Template':'Listino'));
-  const nameEl = document.getElementById('name'+(tipo==='template'?'Template':'Listino'));
-  const badge  = document.getElementById('badge'+(tipo==='template'?'Template':'Listino'));
-
-  if(loaded){
-    slot.className = 'doc-slot loaded';
-    status.className = 'doc-status ok';
-    status.textContent = '✓ Caricato';
-    nameEl.textContent = name;
-    nameEl.classList.remove('hidden');
-    badge.classList.remove('missing');
-    badge.textContent = (tipo==='template'?'📄 ':'💰 ')+name.substring(0,18)+(name.length>18?'…':'');
-  } else {
-    slot.className = 'doc-slot';
-    status.className = 'doc-status missing';
-    status.textContent = tipo==='template' ? '○ Non caricato — verrà usato template dummy' : '○ Non caricato — prezzi non calcolati';
-    nameEl.classList.add('hidden');
-    badge.classList.add('missing');
-    badge.textContent = (tipo==='template'?'📄 Template —':'💰 Listino —');
-  }
-}
-
-// Estrae testo leggibile da file caricato
-async function extractTextFromFile(file){
-  const ext = file.name.split('.').pop().toLowerCase();
-
-  if(ext === 'csv' || ext === 'txt'){
-    return await file.text();
-  }
-
-  if(ext === 'pdf'){
-    // Per PDF restituiamo nome e dimensione come placeholder
-    // In produzione: usare pdf.js o backend per estrazione testo
-    return '[PDF: '+file.name+' — '+Math.round(file.size/1024)+'KB — estrazione testo richiede backend]';
-  }
-
-  if(ext === 'docx' || ext === 'doc'){
-    // Per .docx: estraiamo XML interno come testo grezzo
-    // In produzione: usare mammoth.js o backend
-    return '[DOCX: '+file.name+' — '+Math.round(file.size/1024)+'KB — struttura caricata]';
-  }
-
-  if(ext === 'xlsx' || ext === 'xls'){
-    return '[EXCEL: '+file.name+' — '+Math.round(file.size/1024)+'KB — caricato]';
-  }
-
-  return await file.text();
-}
-
-// ═══════════════════════════════════════════════
-// STEPS
-// ═══════════════════════════════════════════════
-function setStep(n){
-  for(let i=1;i<=4;i++){
-    const s=document.getElementById('s'+i);
-    s.className='step '+(i<n?'done':i===n?'active':'');
-  }
-}
-
-// ═══════════════════════════════════════════════
-// RECORDING
-// ═══════════════════════════════════════════════
-async function toggleRecording(){if(!isRecording)await startRecording();else stopRecording();}
-
-async function startRecording(){
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    mediaRecorder=new MediaRecorder(stream);audioChunks=[];
-    mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
-    mediaRecorder.onstop=onRecordingStop;mediaRecorder.start();
-    isRecording=true;seconds=0;
-    timerInterval=setInterval(()=>{seconds++;document.getElementById('timer').textContent=fmt(seconds);},1000);
-    document.getElementById('timer').className='timer running';
-    document.getElementById('recordBtn').className='record-btn recording';
-    document.getElementById('recordBtn').textContent='⏹';
-    document.getElementById('recStatus').innerHTML='<span>● REC</span> · Nota '+(recordings.length+1);
-    document.getElementById('recPill').textContent='● REC';
-    document.getElementById('recPill').className='pill active';
-    document.getElementById('waveform').className='waveform active';
-    const e=document.getElementById('recEmpty');if(e)e.style.display='none';
-  }catch(err){toast('Microfono non accessibile: '+err.message,'error');}
-}
-
-function stopRecording(){
-  if(mediaRecorder&&mediaRecorder.state!=='inactive'){mediaRecorder.stop();mediaRecorder.stream.getTracks().forEach(t=>t.stop());}
-  clearInterval(timerInterval);isRecording=false;
-  document.getElementById('timer').className='timer';
-  document.getElementById('timer').textContent='00:00';
-  document.getElementById('recordBtn').className='record-btn';
-  document.getElementById('recordBtn').textContent='🎙';
-  document.getElementById('recStatus').textContent='Premi per aggiungere un\'altra nota';
-  document.getElementById('recPill').textContent=recordings.length+' nota/e';
-  document.getElementById('recPill').className='pill';
-  document.getElementById('waveform').className='waveform';
-}
-
-function onRecordingStop(){
-  const blob=new Blob(audioChunks,{type:'audio/webm'});
-  recordings.push({blob,duration:seconds,transcript:'',status:'pending'});
-  renderRecList();
-  document.getElementById('analyzeBtn').classList.remove('hidden');
-  document.getElementById('useMockBtn').classList.remove('hidden');
-  document.getElementById('resetBtn1').classList.remove('hidden');
-}
-
-function renderRecList(){
-  const list=document.getElementById('recList');
-  const e=document.getElementById('recEmpty');if(e)e.style.display='none';
-  list.querySelectorAll('.rec-item').forEach(x=>x.remove());
-  recordings.forEach((r,i)=>{
-    const div=document.createElement('div');
-    div.className='rec-item '+(r.status==='transcribing'?'transcribing':r.status==='done'?'done-item':'');
-    div.id='recitem-'+i;
-    const icon=r.status==='done'?'✅':r.status==='transcribing'?'⏳':'🎙';
-    const preview=r.transcript?r.transcript.substring(0,80)+(r.transcript.length>80?'…':''):'In attesa di analisi...';
-    div.innerHTML=`<span class="rec-num">#${i+1}</span><span class="rec-dur">${fmt(r.duration)}</span><span class="rec-transcript">${preview}</span><span class="rec-status-icon">${icon}</span><button class="rec-del" onclick="deleteRec(${i})">✕</button>`;
-    list.appendChild(div);
-  });
-}
-
-function deleteRec(idx){
-  recordings.splice(idx,1);
-  if(recordings.length===0){
-    const e=document.getElementById('recEmpty');if(e)e.style.display='';
-    ['analyzeBtn','useMockBtn','resetBtn1'].forEach(id=>document.getElementById(id).classList.add('hidden'));
-    document.getElementById('recPill').textContent='Pronto';
-  } else {
-    document.getElementById('recPill').textContent=recordings.length+' nota/e';
-  }
-  renderRecList();
-}
-
-// ═══════════════════════════════════════════════
-// ANALYSIS
-// ═══════════════════════════════════════════════
-async function runAnalysis(){
-  if(recordings.length===0){toast('Nessuna registrazione','error');return;}
-  document.getElementById('card2').classList.remove('hidden');
-  document.getElementById('analyzeBtn').disabled=true;
-  setStep(2);
-  try{
-    setProcStep(1,'active');
-    document.getElementById('proc1txt').textContent='Trascrizione audio ('+recordings.length+' nota/e)';
-    let allTranscripts=[];
-    for(let i=0;i<recordings.length;i++){
-      recordings[i].status='transcribing';renderRecList();
-      const formData=new FormData();
-      formData.append('file',recordings[i].blob,'recording_'+(i+1)+'.webm');
-      formData.append('model','whisper-large-v3');
-      formData.append('language','it');
-      const res=await fetch(API_TRANSCRIBE,{method:'POST',body:formData});
-      if(!res.ok)throw new Error('STT error nota '+(i+1)+': '+await res.text());
-      const data=await res.json();
-      recordings[i].transcript=data.text||'';
-      recordings[i].status='done';
-      allTranscripts.push('[NOTA '+(i+1)+']\n'+recordings[i].transcript);
-      renderRecList();
-    }
-    setProcStep(1,'done');
-    setProcStep(2,'active');
-    const fullTranscript=allTranscripts.join('\n\n');
-    await sleep(300);setProcStep(2,'done');
-    setProcStep(3,'active');
-    const jsonData=await extractWithLLM(fullTranscript);
-    extractedData=jsonData;setProcStep(3,'done');
-    setProcStep(4,'active');
-    populateForm(jsonData);await sleep(300);setProcStep(4,'done');
-    await sleep(400);showValidation();
-  }catch(err){
-    toast('Errore: '+err.message,'error');
-    document.getElementById('analyzeBtn').disabled=false;
-    console.error(err);
-  }
-}
-
-async function extractWithLLM(transcript){
-  // Costruisce il contesto con i documenti caricati
-  let docsContext = '';
-  if(listinoDoc && listinoDoc.content){
-    docsContext += '\n\nLISTINO PREZZI DISPONIBILE:\n'+listinoDoc.content.substring(0,3000);
-  }
-  if(templateDoc && templateDoc.content){
-    docsContext += '\n\nTEMPLATE PREVENTIVO (struttura):\n'+templateDoc.content.substring(0,2000);
-  }
-
-  const systemPrompt=`Sei un assistente per commerciali di videosorveglianza. Ricevi trascrizioni di note vocali da sopralluogo (numerate [NOTA 1], [NOTA 2]...). Estrai informazioni tecniche/commerciali rilevanti. Ignora chiacchiere. Restituisci SOLO JSON valido, nessun testo aggiuntivo, nessun markdown.
-REGOLE: campo non menzionato = "non rilevato". nota_sintetica = 3-5 righe professionali italiano. confidenza_estrazione = Alta/Media/Bassa.${docsContext ? '\nUSA il listino prezzi se disponibile per stimare i prezzi.' : ''}
-OUTPUT: {"cliente":{"ragione_sociale":"","tipo_cliente":"","referente":"","indirizzo_sito":""},"sito":{"superficie_mq":"","perimetro_ml":"","n_accessi":"","illuminazione_notturna":"","esigenze_speciali":[],"note_tecniche":""},"intervento":{"livello_procedura":"","tipo_contratto":"","urgenza":""},"telecamere":{"totale_stimato":"","lista":[{"posizione":"","tipo":"","note":""}]},"infrastruttura":{"dvr_nvr":"","connettivita":"","control_room_tunisia":""},"commerciale":{"nome":"","email":""},"meta":{"data_sopralluogo":"","nota_sintetica":"","confidenza_estrazione":""},"prezzi":{"subtotale_stimato":"","note_prezzi":""}}`;
-
-  const res=await fetch(API_EXTRACT,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'llama-3.3-70b-versatile',
-      temperature:0.1,
-      messages:[
-        {role:'system',content:systemPrompt},
-        {role:'user',content:'Trascrizioni:\n"""\n'+transcript+'\n"""'+(docsContext||'')}
-      ]
-    })
-  });
-  if(!res.ok)throw new Error('LLM error: '+await res.text());
-  const data=await res.json();
-  const raw=data.choices[0].message.content.trim();
-  return JSON.parse(raw.replace(/```json|```/g,'').trim());
-}
-
-// ═══════════════════════════════════════════════
-// MOCK DATA
-// ═══════════════════════════════════════════════
-function useMockData(){
-  recordings=[{blob:null,duration:87,transcript:'[NOTA 1] TransPadana Logistica, Brescia',status:'done'},{blob:null,duration:42,transcript:'[NOTA 2] 16 telecamere, urgenza alta, Tunisia confermata',status:'done'}];
-  renderRecList();
-  document.getElementById('card2').classList.remove('hidden');setStep(2);
-  let i=0;const iv=setInterval(()=>{if(i>0)setProcStep(i,'done');if(i<4){setProcStep(i+1,'active');i++;}else{clearInterval(iv);extractedData=getMockData();setTimeout(showValidation,400);}},600);
-}
-
-function getMockData(){
-  return{cliente:{ragione_sociale:"TransPadana Logistica e Trasporti s.r.l.",tipo_cliente:"Industriale",referente:"Mauro Filippini",indirizzo_sito:"Via dell'Artigianato 12, Brescia"},sito:{superficie_mq:"5000",perimetro_ml:"600",n_accessi:"3",illuminazione_notturna:"Presente",esigenze_speciali:["ANPR","PTZ"],note_tecniche:"Cestello elevatore per tralicci 8m"},intervento:{livello_procedura:"3-Complesso",tipo_contratto:"Nuova installazione",urgenza:"Alta"},telecamere:{totale_stimato:"16",lista:[{posizione:"Cancello carrabile 1",tipo:"ANPR",note:"Lettura targhe"},{posizione:"Cancello carrabile 2",tipo:"ANPR",note:"Lettura targhe"},{posizione:"Angoli perimetrali (x4)",tipo:"PTZ",note:"Traliccio 8m"},{posizione:"Corsie interne (x10)",tipo:"Fissa",note:"Distribuite lungo corsie"}]},infrastruttura:{dvr_nvr:"da installare",connettivita:"Fibra",control_room_tunisia:"Sì"},commerciale:{nome:"non rilevato",email:"non rilevato"},meta:{data_sopralluogo:new Date().toISOString().split('T')[0],nota_sintetica:"Sopralluogo TransPadana Logistica, Brescia. Sito industriale 5000mq, 3 accessi. 16 cam: 2 ANPR, 4 PTZ, 10 fisse. Control Room Tunisia confermata. NVR da installare, fibra presente. Urgenza alta.",confidenza_estrazione:"Alta"},prezzi:{subtotale_stimato:"non rilevato",note_prezzi:"Listino non caricato"}};
-}
-
-// ═══════════════════════════════════════════════
-// FORM
-// ═══════════════════════════════════════════════
-function populateForm(d){
-  const set=(id,val)=>{const el=document.getElementById(id);if(!el)return;el.value=val||'non rilevato';el.classList.toggle('warn',!val||val==='non rilevato');};
-  const setLbl=(id,val)=>{const l=document.getElementById(id);if(!l)return;const b=l.dataset.base||(l.dataset.base=l.textContent.trim());l.innerHTML=b+(!val||val==='non rilevato'?' <span class="badge-warn">⚠</span>':' <span class="badge-ok">✓</span>');};
-  set('f_ragione',d.cliente.ragione_sociale);setLbl('lbl_ragione',d.cliente.ragione_sociale);
-  set('f_tipo',d.cliente.tipo_cliente);
-  set('f_referente',d.cliente.referente);setLbl('lbl_referente',d.cliente.referente);
-  set('f_indirizzo',d.cliente.indirizzo_sito);setLbl('lbl_indirizzo',d.cliente.indirizzo_sito);
-  set('f_sup',d.sito.superficie_mq);setLbl('lbl_sup',d.sito.superficie_mq);
-  set('f_per',d.sito.perimetro_ml);setLbl('lbl_per',d.sito.perimetro_ml);
-  set('f_acc',d.sito.n_accessi);setLbl('lbl_acc',d.sito.n_accessi);
-  set('f_ill',d.sito.illuminazione_notturna);set('f_note',d.sito.note_tecniche);
-  set('f_lvl',d.intervento.livello_procedura);set('f_contratto',d.intervento.tipo_contratto);
-  set('f_urg',d.intervento.urgenza);set('f_cr',d.infrastruttura.control_room_tunisia);
-  document.getElementById('notaSintetica').value=d.meta.nota_sintetica||'';
-  const tbody=document.getElementById('camBody');tbody.innerHTML='';
-  (d.telecamere.lista||[]).forEach(cam=>addCamRow(cam));
-  const nome=d.commerciale.nome!=='non rilevato'?d.commerciale.nome:localStorage.getItem('user_name')||'';
-  const email=d.commerciale.email!=='non rilevato'?d.commerciale.email:localStorage.getItem('user_email')||'';
-  document.getElementById('f_commName').value=nome;
-  document.getElementById('f_commEmail').value=email;
-  const conf=d.meta.confidenza_estrazione||'Media';
-  const bar=document.getElementById('confBar');
-  bar.className='conf-bar-wrap conf-'+conf;
-  bar.querySelector('.conf-val').textContent=conf;
-  document.getElementById('confPill').textContent='Confidenza: '+conf;
-}
-
-function addCamRow(cam){
-  cam=cam||{posizione:'',tipo:'Fissa',note:''};
-  const tbody=document.getElementById('camBody');
-  const n=tbody.rows.length+1;
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td class="cam-idx">${n}</td><td><input type="text" value="${cam.posizione||''}" placeholder="Posizione..."/></td><td><select>${['ANPR','PTZ','Fissa','Termica','Fisheye','Altra'].map(t=>`<option ${t===cam.tipo?'selected':''}>${t}</option>`).join('')}</select></td><td><input type="text" value="${cam.note||''}" placeholder="Note..."/></td><td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="this.closest('tr').remove()">✕</button></td>`;
-  tbody.appendChild(tr);
-}
-
-function showValidation(){
-  document.getElementById('card3').classList.remove('hidden');
-  setStep(3);
-  document.getElementById('card3').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-function goToSend(){
-  document.getElementById('card4').classList.remove('hidden');
-  document.getElementById('f_sendEmail').value=document.getElementById('f_commEmail').value;
-  setStep(4);
-  document.getElementById('card4').scrollIntoView({behavior:'smooth',block:'start'});
-  // Aggiorna info documenti usati
-  const info = document.getElementById('docsUsedInfo');
-  const tLabel = templateDoc ? '✓ '+templateDoc.name : '⚠ Template dummy (nessun file caricato)';
-  const lLabel = listinoDoc  ? '✓ '+listinoDoc.name  : '⚠ Listino non caricato — prezzi non inclusi';
-  info.innerHTML = '📄 <b>Template:</b> '+tLabel+'&nbsp;&nbsp;&nbsp;💰 <b>Listino:</b> '+lLabel;
-}
-
-function goBackToValidation(){
-  document.getElementById('card4').classList.add('hidden');
-  setStep(3);
-  document.getElementById('card3').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-// ═══════════════════════════════════════════════
-// COLLECT FORM DATA
-// ═══════════════════════════════════════════════
-function collectFormData(){
-  return{
-    ragione:    document.getElementById('f_ragione').value,
-    tipo:       document.getElementById('f_tipo').value,
-    referente:  document.getElementById('f_referente').value,
-    indirizzo:  document.getElementById('f_indirizzo').value,
-    sup:        document.getElementById('f_sup').value,
-    per:        document.getElementById('f_per').value,
-    acc:        document.getElementById('f_acc').value,
-    ill:        document.getElementById('f_ill').value,
-    note:       document.getElementById('f_note').value,
-    lvl:        document.getElementById('f_lvl').value,
-    contratto:  document.getElementById('f_contratto').value,
-    urg:        document.getElementById('f_urg').value,
-    cr:         document.getElementById('f_cr').value,
-    nota:       document.getElementById('notaSintetica').value,
-    commName:   document.getElementById('f_commName').value,
-    commEmail:  document.getElementById('f_commEmail').value,
-    telecamere: Array.from(document.getElementById('camBody').rows).map(r=>({
-      posizione: r.cells[1].querySelector('input').value,
-      tipo:      r.cells[2].querySelector('select').value,
-      note:      r.cells[3].querySelector('input').value
-    })),
-    data:       new Date().toLocaleDateString('it-IT'),
-    prezzi:     extractedData?.prezzi || {subtotale_stimato:'non rilevato',note_prezzi:''}
-  };
-}
-
-// ═══════════════════════════════════════════════
-// GENERA DOCX
-// ═══════════════════════════════════════════════
-async function downloadDOCX(){
-  const d = collectFormData();
-  toast('Generazione Word in corso...','info');
-  try{
-    // Se docx.js disponibile, usa la libreria; altrimenti fallback
-    if(typeof docx === 'undefined'){
-      toast('Libreria Word non caricata — riprova tra qualche secondo','error');
-      return;
-    }
-    const {
-      Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-      AlignmentType, HeadingLevel, BorderStyle, WidthType, ShadingType,
-      VerticalAlign
-    } = docx;
-
-    // ── Helper border ──
-    const border  = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' };
-    const borders = { top:border, bottom:border, left:border, right:border };
-
-    const headerBorder = { style: BorderStyle.SINGLE, size: 1, color: '1B3A6B' };
-    const headerBorders = { top:headerBorder, bottom:headerBorder, left:headerBorder, right:headerBorder };
-
-    // ── Stile celle header tabella ──
-    function makeHeaderCell(text, w){
-      return new TableCell({
-        borders: headerBorders,
-        width: { size:w, type:WidthType.DXA },
-        shading: { fill:'1B3A6B', type:ShadingType.CLEAR },
-        margins: { top:80, bottom:80, left:120, right:120 },
-        children:[new Paragraph({
-          children:[new TextRun({ text, bold:true, color:'FFFFFF', size:18 })]
-        })]
-      });
-    }
-
-    // ── Stile celle dati ──
-    function makeDataCell(text, w, isLabel=false){
-      return new TableCell({
-        borders,
-        width: { size:w, type:WidthType.DXA },
-        shading: { fill: isLabel?'EBF0F7':'FFFFFF', type:ShadingType.CLEAR },
-        margins: { top:80, bottom:80, left:120, right:120 },
-        children:[new Paragraph({
-          children:[new TextRun({ text: String(text||'—'), bold:isLabel, color:isLabel?'1B3A6B':'1E1E1E', size:18 })]
-        })]
-      });
-    }
-
-    // ── Paragrafo sezione ──
-    function sectionTitle(text){
-      return new Paragraph({
-        spacing:{ before:240, after:120 },
-        border:{ bottom:{ style:BorderStyle.SINGLE, size:6, color:'1B3A6B', space:1 } },
-        children:[new TextRun({ text, bold:true, size:22, color:'1B3A6B', font:'Arial' })]
-      });
-    }
-
-    // ── Tabella info (2 colonne label|valore) ──
-    function infoTable(rows){
-      return new Table({
-        width:{ size:9026, type:WidthType.DXA },
-        columnWidths:[2706,6320],
-        rows: rows.map(([label,value])=>
-          new TableRow({
-            children:[
-              makeDataCell(label, 2706, true),
-              makeDataCell(value, 6320, false)
-            ]
-          })
-        )
-      });
-    }
-
-    // ── Righe telecamere ──
-    const camRows = d.telecamere.map((c,i)=>
-      new TableRow({
-        children:[
-          makeDataCell(String(i+1),     1000),
-          makeDataCell(c.posizione||'—', 4026),
-          makeDataCell(c.tipo||'—',      2000),
-          makeDataCell(c.note||'—',      2000)
-        ]
-      })
-    );
-
-    // ── Note sintetica ──
-    const notaLines = (d.nota||'—').split('\n').map(line=>
-      new Paragraph({
-        spacing:{ before:0, after:60 },
-        children:[new TextRun({ text:line, italics:true, size:18, color:'323232' })]
-      })
-    );
-
-    // ── Intestazione info preventivo ──
-    const listinoInfo = listinoDoc
-      ? 'Listino: '+listinoDoc.name
-      : 'Listino non caricato — prezzi da verificare';
-    const templateInfo = templateDoc
-      ? 'Template: '+templateDoc.name
-      : 'Template dummy (sostituire con template di Gianni)';
-
-    // ── DOCUMENTO ──
-    const doc = new Document({
-      styles:{
-        default:{
-          document:{ run:{ font:'Arial', size:20 } }
-        }
-      },
-      sections:[{
-        properties:{
-          page:{
-            size:{ width:11906, height:16838 },
-            margin:{ top:1134, right:1134, bottom:1134, left:1134 }
-          }
-        },
-        children:[
-
-          // Titolo principale
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing:{ before:0, after:60 },
-            children:[
-              new TextRun({ text:'BOR SECURITY', bold:true, size:36, color:'1B3A6B', font:'Syne' })
-            ]
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing:{ before:0, after:60 },
-            children:[
-              new TextRun({ text:'Videosorveglianza H24 · Trusted People', size:18, color:'666666' })
-            ]
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing:{ before:0, after:360 },
-            border:{ bottom:{ style:BorderStyle.SINGLE, size:12, color:'1B3A6B', space:1 } },
-            children:[
-              new TextRun({ text:'PREVENTIVO TECNICO-COMMERCIALE', bold:true, size:28, color:'1B3A6B' }),
-              new TextRun({ text:'     Data: '+d.data, size:18, color:'888888' })
-            ]
-          }),
-
-          // Nota sintetica
-          sectionTitle('SINTESI SOPRALLUOGO'),
-          new Table({
-            width:{ size:9026, type:WidthType.DXA },
-            columnWidths:[9026],
-            rows:[new TableRow({
-              children:[new TableCell({
-                borders,
-                width:{ size:9026, type:WidthType.DXA },
-                shading:{ fill:'F8F9FC', type:ShadingType.CLEAR },
-                margins:{ top:120, bottom:120, left:180, right:180 },
-                children: notaLines.length ? notaLines : [new Paragraph({ children:[new TextRun({ text:'—', italics:true })] })]
-              })]
-            })]
-          }),
-
-          new Paragraph({ spacing:{ before:240 } }),
-
-          // Dati cliente
-          sectionTitle('DATI CLIENTE'),
-          infoTable([
-            ['Ragione Sociale', d.ragione],
-            ['Tipo Cliente',    d.tipo],
-            ['Referente',       d.referente],
-            ['Indirizzo Sito',  d.indirizzo],
-            ['Commerciale',     d.commName],
-          ]),
-
-          new Paragraph({ spacing:{ before:240 } }),
-
-          // Dati tecnici sito
-          sectionTitle('DATI TECNICI SITO'),
-          infoTable([
-            ['Superficie (mq)',    d.sup],
-            ['Perimetro (ml)',     d.per],
-            ['N° Accessi',        d.acc],
-            ['Illuminazione',     d.ill],
-            ['Note Tecniche',     d.note],
-          ]),
-
-          new Paragraph({ spacing:{ before:240 } }),
-
-          // Intervento
-          sectionTitle('INTERVENTO'),
-          infoTable([
-            ['Livello Procedura',  d.lvl],
-            ['Tipo Contratto',     d.contratto],
-            ['Urgenza',            d.urg],
-            ['Control Room TN',    d.cr],
-          ]),
-
-          new Paragraph({ spacing:{ before:240 } }),
-
-          // Telecamere
-          sectionTitle('TELECAMERE — '+d.telecamere.length+' UNITÀ'),
-          new Table({
-            width:{ size:9026, type:WidthType.DXA },
-            columnWidths:[1000,4026,2000,2000],
-            rows:[
-              new TableRow({
-                children:[
-                  makeHeaderCell('#',          1000),
-                  makeHeaderCell('Posizione',  4026),
-                  makeHeaderCell('Tipo',       2000),
-                  makeHeaderCell('Note',       2000),
-                ]
-              }),
-              ...camRows
-            ]
-          }),
-
-          new Paragraph({ spacing:{ before:240 } }),
-
-          // Prezzi (se listino caricato)
-          ...(d.prezzi && d.prezzi.subtotale_stimato && d.prezzi.subtotale_stimato !== 'non rilevato'
-            ? [
-                sectionTitle('STIMA ECONOMICA'),
-                infoTable([
-                  ['Subtotale stimato', d.prezzi.subtotale_stimato],
-                  ['Note prezzi',       d.prezzi.note_prezzi || '—'],
-                  ['Listino base',      listinoDoc ? listinoDoc.name : '— non disponibile'],
-                ])
-              ]
-            : []
-          ),
-
-          new Paragraph({ spacing:{ before:360 } }),
-
-          // Footer
-          new Paragraph({
-            spacing:{ before:0 },
-            border:{ top:{ style:BorderStyle.SINGLE, size:4, color:'CCCCCC', space:1 } },
-            alignment: AlignmentType.CENTER,
-            children:[
-              new TextRun({ text:'BOR AI · Sales Copilot — documento generato automaticamente, soggetto a revisione commerciale', italics:true, size:14, color:'AAAAAA' })
-            ]
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children:[
-              new TextRun({ text:templateInfo+' · '+listinoInfo, italics:true, size:12, color:'BBBBBB' })
-            ]
-          }),
-
-        ]
-      }]
+function handleLogin(){
+  if(typeof google!=='undefined'&&google.accounts){
+    google.accounts.id.initialize({
+      client_id:CLIENT_ID,
+      callback:onCred,
+      hd:'borsecurity.it'
     });
-
-    const buffer = await Packer.toBuffer(doc);
-    const blob   = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    const url    = URL.createObjectURL(blob);
-    const a      = document.createElement('a');
-    a.href       = url;
-    a.download   = 'preventivo_'+(d.ragione||'cliente').replace(/[^a-zA-Z0-9]/g,'_').substring(0,20)+'_'+d.data.replace(/\//g,'-')+'.docx';
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('✓ Word scaricato','success');
-
-  } catch(err){
-    console.error(err);
-    toast('Errore generazione Word: '+err.message,'error');
+    google.accounts.id.prompt();
+  }else{
+    // dev fallback — simula login
+    showUser('Giuseppe B.','','giuseppe.bucciero@borsecurity.it');
   }
 }
 
-// ═══════════════════════════════════════════════
-// GENERA PDF (invariato)
-// ═══════════════════════════════════════════════
-function downloadPDF(){
-  const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-  const d=collectFormData();const W=210,M=18,CW=W-M*2;
-  doc.setFillColor(27,58,107);doc.rect(0,0,W,28,'F');doc.setFillColor(46,117,182);doc.rect(130,0,80,28,'F');
-  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('BOR · Sales Copilot',M,11);
-  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('Videosorveglianza H24 · Trusted People',M,17);
-  doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('PREVENTIVO',198,13,{align:'right'});
-  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('Data: '+d.data,198,21,{align:'right'});
-  let y=36;
-  function sT(t){doc.setFillColor(27,58,107);doc.rect(M,y,CW,7,'F');doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text(t,M+3,y+5);y+=11;doc.setTextColor(30,30,30);}
-  function fP(l1,v1,l2,v2){const hw=CW/2-1;doc.setFillColor(240,244,250);doc.rect(M,y,hw*0.42,7,'F');doc.rect(M+hw+2,y,hw*0.42,7,'F');doc.setDrawColor(200,200,200);doc.setLineWidth(0.2);doc.rect(M,y,hw,7);doc.rect(M+hw+2,y,hw,7);doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(27,58,107);doc.text(l1,M+2,y+5);doc.text(l2,M+hw+4,y+5);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);doc.text(String(v1||'—').substring(0,28),M+hw*0.42+2,y+5);doc.text(String(v2||'—').substring(0,28),M+hw+2+hw*0.42+2,y+5);y+=7;}
-  function fF(l,v){doc.setFillColor(240,244,250);doc.rect(M,y,CW*0.25,7,'F');doc.setDrawColor(200,200,200);doc.rect(M,y,CW,7);doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(27,58,107);doc.text(l,M+2,y+5);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);doc.text(String(v||'—').substring(0,70),M+CW*0.25+2,y+5);y+=7;}
-  sT('NOTA SINTETICA');const nL=doc.splitTextToSize(d.nota||'—',CW-6);const nH=nL.length*4.5+4;doc.setFillColor(248,249,252);doc.rect(M,y,CW,nH,'F');doc.setDrawColor(200,200,200);doc.rect(M,y,CW,nH);doc.setFont('helvetica','italic');doc.setFontSize(8);doc.setTextColor(50,50,50);doc.text(nL,M+3,y+5);y+=nH+6;
-  sT('DATI CLIENTE');fF('Ragione Sociale',d.ragione);fP('Tipo',d.tipo,'Referente',d.referente);fF('Indirizzo',d.indirizzo);fP('Commerciale',d.commName,'Data',d.data);y+=4;
-  sT('DATI TECNICI SITO');fP('Superficie',d.sup+' mq','Perimetro',d.per+' ml');fP('N° Accessi',d.acc,'Illuminazione',d.ill);fF('Note Tecniche',d.note);y+=4;
-  sT('INTERVENTO');fP('Livello',d.lvl,'Contratto',d.contratto);fP('Urgenza',d.urg,'Control Room TN',d.cr);y+=4;
-  if(y>230){doc.addPage();y=20;}
-  sT('TELECAMERE ('+d.telecamere.length+' unità)');
-  const cW=[10,80,30,54];doc.setFillColor(27,58,107);let cx=M;
-  ['#','Posizione','Tipo','Note'].forEach((h,i)=>{doc.rect(cx,y,cW[i],7,'F');doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.text(h,cx+2,y+5);cx+=cW[i];});y+=7;
-  d.telecamere.forEach((c,i)=>{if(y>265){doc.addPage();y=20;}doc.setFillColor(i%2===0?248:255,i%2===0?249:255,i%2===0?252:255);doc.rect(M,y,CW,7,'F');doc.setDrawColor(220,220,220);doc.rect(M,y,CW,7);cx=M;doc.setTextColor(30,30,30);doc.setFont('helvetica','normal');doc.setFontSize(7.5);[String(i+1),c.posizione||'—',c.tipo||'—',c.note||'—'].forEach((v,j)=>{doc.text(v.substring(0,j===1?42:j===3?30:15),cx+2,y+5);cx+=cW[j];});y+=7;});
-  // Prezzi se disponibili
-  if(d.prezzi && d.prezzi.subtotale_stimato && d.prezzi.subtotale_stimato!=='non rilevato'){
-    y+=4;if(y>260){doc.addPage();y=20;}
-    sT('STIMA ECONOMICA');fP('Subtotale stimato',d.prezzi.subtotale_stimato,'Listino',listinoDoc?listinoDoc.name:'—');
-  }
-  doc.setFillColor(240,244,250);doc.rect(0,285,W,12,'F');doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text('BOR AI · Sales Copilot — documento generato automaticamente, soggetto a revisione',M,292);doc.text('Pag.1',W-M,292,{align:'right'});
-  doc.save('preventivo_'+(d.ragione||'cliente').replace(/[^a-zA-Z0-9]/g,'_').substring(0,20)+'_'+d.data.replace(/\//g,'-')+'.pdf');
-  toast('PDF scaricato','success');
+function onCred(resp){
+  const p=JSON.parse(atob(resp.credential.split('.')[1]));
+  showUser(p.name,p.picture,p.email);
 }
 
-// ═══════════════════════════════════════════════
-// EMAIL
-// ═══════════════════════════════════════════════
-function sendEmail(){
-  const email=document.getElementById('f_sendEmail').value;
-  if(!email){toast('Inserisci un indirizzo email','error');return;}
-  const d=collectFormData();
-  const subj=encodeURIComponent('Preventivo Videosorveglianza – '+(d.ragione||'Cliente')+' – '+d.data);
-  const body=encodeURIComponent('Gentile '+d.commName+',\n\nPreventivo dal sopralluogo presso '+(d.ragione||'—')+'.\n\nRIEPILOGO:\n• Cliente: '+d.ragione+' ('+d.tipo+')\n• Sito: '+d.indirizzo+'\n• Telecamere: '+d.telecamere.length+' unità\n• Livello: '+d.lvl+' | Urgenza: '+d.urg+'\n• Control Room Tunisia: '+d.cr+'\n\nNOTA SINTETICA:\n'+d.nota+'\n\n---\nBOR AI · Sales Copilot\nData: '+d.data);
-  window.open('mailto:'+email+'?subject='+subj+'&body='+body);
-  document.getElementById('sendResult').classList.remove('hidden');
-  toast('Client email aperto','success');
+function showUser(name,pic,email){
+  document.getElementById('btnLogin').style.display='none';
+  const chip=document.getElementById('userChip');
+  chip.style.display='flex';
+  document.getElementById('userName').textContent=name.split(' ')[0];
+  const av=document.getElementById('userAvatar');
+  if(pic){av.src=pic;}else{av.style.display='none';}
+  sessionStorage.setItem('borUser',JSON.stringify({name,pic,email}));
 }
 
-// ═══════════════════════════════════════════════
-// UTILS
-// ═══════════════════════════════════════════════
-function setProcStep(n,state){
-  const el=document.getElementById('proc'+n);if(!el)return;
-  el.className='processing-row '+(state==='done'?'done':state==='active'?'active':'');
-  const icon=el.querySelector('div');
-  if(state==='done')icon.innerHTML='<span style="color:var(--ok)">✓</span>';
-  else if(state==='active')icon.innerHTML='<div class="spin"></div>';
-  else icon.innerHTML='<span style="color:var(--text3)">○</span>';
+function handleLogout(){
+  sessionStorage.removeItem('borUser');
+  document.getElementById('userChip').style.display='none';
+  document.getElementById('btnLogin').style.display='flex';
 }
-function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-let toastTimeout;
-function toast(msg,type='info'){
-  const t=document.getElementById('toast');t.textContent=msg;
-  t.className='show '+(type==='success'?'success':type==='error'?'error':'');
-  clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>t.className='',3500);
-}
-function resetAll(){location.reload();}
 
-// ═══════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════
-initUser();
-initDocs();
+window.addEventListener('DOMContentLoaded',()=>{
+  const s=sessionStorage.getItem('borUser');
+  if(s){const u=JSON.parse(s);showUser(u.name,u.pic,u.email);}
+});
 </script>
+
+<!-- Google Identity Services: attiva quando hai CLIENT_ID reale -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 </body>
 </html>
